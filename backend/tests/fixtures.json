@@ -1,0 +1,72 @@
+{
+  "valid_responses": [
+    {
+      "description": "Complete extraction of full name and address",
+      "input": "My name is Arthur Dent and I live at 42 Country Lane, Cottington",
+      "expected_extraction": {
+        "full_name": "Arthur Dent",
+        "home_address": "42 Country Lane, Cottington"
+      }
+    },
+    {
+      "description": "Executor name with parenthesized relationship",
+      "input": "Ford Prefect (Friend)",
+      "expected_extraction": {
+        "executor_name": "Ford Prefect",
+        "executor_relationship": "Friend"
+      }
+    },
+    {
+      "description": "Single-turn multi-child extraction",
+      "input": "I have two kids: Alice and Bob",
+      "expected_extraction": {
+        "has_children": true,
+        "children_names": ["Alice", "Bob"]
+      }
+    },
+    {
+      "description": "Estate worldwide assets confirmation",
+      "input": "Yes, this covers worldwide assets",
+      "expected_extraction": {
+        "covers_worldwide_assets": true
+      }
+    }
+  ],
+  "ambiguous_responses": [
+    {
+      "description": "Unclear negative answer during name intake",
+      "input": "Maybe later or something",
+      "initial_state": {},
+      "expected_unconfirmed": ["full_name"]
+    },
+    {
+      "description": "Ambiguous executor relationship missing relationship type",
+      "input": "Executor is Sarah",
+      "initial_state": {
+        "full_name": "Arthur Dent",
+        "home_address": "42 Country Lane",
+        "covers_worldwide_assets": true,
+        "has_children": false
+      },
+      "expected_extraction": {
+        "executor_name": "Sarah",
+        "executor_relationship": null
+      },
+      "expected_next_question": "What is your relationship to your executor?"
+    }
+  ],
+  "malformed_responses": [
+    {
+      "description": "Malformed payload with unexpected data types",
+      "payload": {
+        "full_name": 12345,
+        "covers_worldwide_assets": "not_a_boolean",
+        "executor": "invalid_nested_structure"
+      }
+    },
+    {
+      "description": "Empty payload string",
+      "payload": ""
+    }
+  ]
+}
