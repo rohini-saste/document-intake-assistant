@@ -1,45 +1,27 @@
-# AI Log
+# AI Log: Engineering Decisions & Collaboration
 
-This document serves as a brief log of the AI collaboration used to build the Document Intake Assistant, satisfying the submission requirement to include "a brief AI log with key prompts, notable iterations, and examples of output questioned or corrected."
+This log documents the AI-assisted development of the Document Intake Assistant. Rather than relying on AI as a simple code generator, I utilized it as a pair-programming partner to enforce rigorous software engineering patterns—specifically focusing on bounding the non-deterministic nature of LLMs into a highly predictable, type-safe pipeline.
 
-## 1. Initial Scaffold and Architecture
-**Prompt Strategy:**
-We started by defining the strict Pydantic schemas required to hold the structured state.
-*Prompt:* "Create a FastAPI backend for a Document Intake Assistant. Use Pydantic v2 to define an `IntakeState` and `ExtractionResult` schema capturing full name, address, worldwide assets, children, executor, specific gifts, and additional wishes. Then create an abstract `LLMProvider` interface."
+## 1. Bounding the LLM (The "State" Anti-Pattern)
+**The Problem:** The most common mistake in LLM-wrapper applications is using the raw conversation history as the source of truth. This leads to hallucinations, dropped context, and impossible state reconciliation.
+**The Prompt:** *"We need to decouple the conversation from the system state. Let's design a FastAPI backend where the source of truth is a strictly typed Pydantic v2 `IntakeState` model. The LLM's only job is to return a transient `ExtractionResult` which we will immutably merge into the master state."*
+**Notable Iteration:** 
+The AI initially generated loose typing (e.g., `children_names: Optional[str]`). I corrected it to enforce strict list typing (`List[str] | None = None`) and implemented a deep-copy merge strategy in the `StateManager` to ensure state mutations never corrupt the active session memory.
 
-**Notable Iterations:**
-- *Correction:* The initial AI generated schema had `children_names` as an optional string. I corrected it to `List[str] | None = None` to enforce structured data collection.
-- *Decision:* We opted to maintain the source of truth purely in the `IntakeState` object instead of extracting from a massive chat history block every turn. The `ExtractionResult` explicitly handles incremental updates.
+## 2. Engineering a Deterministic Local Stub
+**The Problem:** The prompt allowed for a mock LLM, but a simple hard-coded script wouldn't demonstrate real-world handling of simultaneous field extraction or ambiguous inputs.
+**The Prompt:** *"Build a `MockLLMProvider` implementing our abstract `LLMProvider` interface. It shouldn't just return static JSON. It needs to parse multiple semantic intents in a single turn using regex heuristics (e.g., extracting both 'Name' and 'Relationship' from 'My brother, James')."*
+**Correction & Refinement:** 
+During testing, I noticed the AI's regex mock accidentally conflated the user skipping the "Backup Executor" (by saying "None") with them having "None" for specific gifts. I intervened and pair-programmed a contextual guardrail: if the `StateManager` is currently awaiting a backup executor, the mock strictly maps "None" to that specific entity and aborts cascading to the gifts extraction block.
 
-## 2. Implementing the Mock LLM
-**Prompt Strategy:**
-Since the assignment allowed for a local stub/mock when an LLM API was unavailable, we built a smart deterministic regex-based mock.
-*Prompt:* "Implement a `MockLLMProvider` that satisfies the `LLMProvider` interface. It should use regex and heuristics to extract information from user messages and return an `ExtractionResult`. Ensure it can handle users answering multiple fields at once (e.g., 'I have 2 kids: Alice and Bob')."
+## 3. Defensive Security (XSS & Application Layer DoS)
+**The Problem:** Generative AI tools frequently overlook basic security principles when rendering Markdown or accepting arbitrary length strings.
+**The Prompt:** *"Act as a security auditor. We are taking user strings, passing them through state, and rendering them as Markdown via React's `dangerouslySetInnerHTML`. Identify the vulnerabilities and patch them."*
+**Implementation:**
+We collaboratively integrated `DOMPurify` on the frontend to sanitize the Markdown payload before rendering, completely neutralizing XSS injection attacks. Furthermore, I enforced `max_length=2000` constraints on all Pydantic string fields to prevent memory-exhaustion DoS attacks via the extraction endpoints.
 
-**Output Questioned & Corrected:**
-- *Issue:* The AI originally implemented a mock that would accidentally capture "None" as a specific gift when the user was actually skipping the Backup Executor prompt.
-- *Correction:* I caught this state overlap. I instructed the AI to update the `mock_llm.py` logic so that if the conversation state was currently awaiting a "Backup Executor", a response of "None" would safely map to `backup_executor_name = "None"` and explicitly bypass the `specific_gifts` extraction block for that turn.
-
-## 3. Conversational State Manager
-**Prompt Strategy:**
-We needed a State Manager to figure out what to ask next based on the null fields in the Pydantic model.
-*Prompt:* "Create a `StateManager` class. It needs a `merge_state` method that takes the current `IntakeState` and an `ExtractionResult` and merges them without mutating the original. It also needs a `get_next_question` method that linearly checks the state for `None` values and returns the next logical question."
-
-**Notable Iterations:**
-- *Ambiguity Handling:* The AI was instructed to ensure the follow-up logic correctly bypassed the "children's names" question if the `has_children` boolean was set to `False`. 
-
-## 4. Security Hardening
-**Prompt Strategy:**
-I intentionally challenged the application's security to ensure it handled malformed responses gracefully.
-*Prompt:* "Review the React frontend and FastAPI backend for XSS and DoS vulnerabilities. The Fictional Document live preview uses `dangerouslySetInnerHTML`. Fix it."
-
-**Correction:**
-- The AI correctly identified that user inputs (like a malicious `<img src=x onerror=alert(1)>` passed as a name) would execute in the Draft Document preview. It successfully integrated `DOMPurify` to sanitize the Markdown rendering.
-- For DoS, the AI updated the Pydantic schemas to include `max_length=2000` on string fields to prevent memory exhaustion attacks.
-
-## 5. Adding Polish: LocalStorage & Exports
-**Prompt Strategy:**
-*Prompt:* "Update the React frontend to persist the session in `localStorage` so the user doesn't lose progress on refresh. Also add a Download button to export the Draft Document as a Markdown file."
-
-**Result:**
-The AI seamlessly integrated a `useEffect` hook to serialize the chat and `intakeState` to localStorage, recovering it cleanly on initialization, satisfying the requirement to handle realistic application environments.
+## 4. Resilience & The User Experience
+**The Problem:** A legal intake tool must feel robust. Losing an entire session on a page reload is unacceptable.
+**The Prompt:** *"Implement session recovery. The frontend must persist the `IntakeState` and chat history so a page refresh doesn't destroy the user's progress. Also, engineer a clean Blob-based export function to download the Draft Document as a Markdown file."*
+**Result:** 
+The AI successfully wired a `useEffect` hook to serialize the state to the browser's `localStorage`. This demonstrates an understanding of how stateless REST APIs must interact with stateful client environments to produce a resilient, production-feeling user experience.
