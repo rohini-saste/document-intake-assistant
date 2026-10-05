@@ -50,6 +50,13 @@ def test_full_conversational_workflow():
     state = manager.merge_state(state, ext)
     assert state.executor.name == "Ramesh"
     assert state.executor.relationship == "Brother"
+    assert manager.get_next_question(state) == "Who would you like to appoint as your secondary or backup executor? (You can say 'None' if you don't want one)"
+
+    # Step 5b: User skips backup executor
+    ext, _ = llm.extract_and_respond("None", state)
+    assert ext.backup_executor_name == "None"
+    state = manager.merge_state(state, ext)
+    assert state.backup_executor.name == "None"
     assert manager.get_next_question(state) == "Are there any specific gifts you would like to leave to anyone?"
 
     # Step 6: User provides specific gifts

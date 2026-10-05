@@ -128,12 +128,28 @@ class MockLLMProvider(LLMProvider):
                     result.executor_relationship = raw_msg.title()
 
         # -------------------------------------------------------------
+        # 5.5 Backup Executor Details
+        # -------------------------------------------------------------
+        if current_state.executor.relationship is not None:
+            if current_state.backup_executor.name is None and result.backup_executor_name is None and result.specific_gifts is None:
+                if len(raw_msg.split()) <= 4 and re.search(r'^\s*(no|none)\s*$', msg):
+                    result.backup_executor_name = "None"
+                elif len(raw_msg.split()) <= 4:
+                    result.backup_executor_name = raw_msg.title()
+            elif current_state.backup_executor.name is not None and current_state.backup_executor.name.lower() != "none" and current_state.backup_executor.relationship is None and result.backup_executor_relationship is None:
+                rel_match = re.search(r'\b(brother|sister|friend|wife|husband|spouse|son|daughter|partner|solicitor|lawyer|father|mother|colleague|cousin)\b', msg)
+                if rel_match:
+                    result.backup_executor_relationship = rel_match.group(1).title()
+                elif len(raw_msg.split()) <= 3:
+                    result.backup_executor_relationship = raw_msg.title()
+
+        # -------------------------------------------------------------
         # 6. Specific Gifts Extraction & Corrections
         # -------------------------------------------------------------
         gift_explicit = re.search(r'(?:specific gifts?|gifts?|leave)\s*:\s*(.*)', raw_msg, re.IGNORECASE)
         if gift_explicit:
             result.specific_gifts = gift_explicit.group(1).strip()
-        elif current_state.executor.relationship is not None and current_state.specific_gifts is None:
+        elif current_state.executor.relationship is not None and (current_state.backup_executor.name == "None" or current_state.backup_executor.relationship is not None) and current_state.specific_gifts is None and result.backup_executor_name is None and result.backup_executor_relationship is None:
             if re.search(r'\b(no|none|nothing|no gifts|no specific gifts|n/a|none specified)\b', msg):
                 result.specific_gifts = "None"
             else:

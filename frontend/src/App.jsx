@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, FileText, Database, RotateCcw } from 'lucide-react';
+import { Send, FileText, Database, RotateCcw, Download } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import { chatWithAssistant, resetSession } from './api';
 
 export default function App() {
@@ -24,9 +25,44 @@ export default function App() {
     handleReset();
   }, []);
 
-  const handleReset = async () => {
+  useEffect(() => {
+    if (messages.length > 0 && intakeState) {
+      localStorage.setItem('docIntakeSession', JSON.stringify({
+        messages, intakeState, draftDoc
+      }));
+    }
+  }, [messages, intakeState, draftDoc]);
+
+  const handleDownload = () => {
+    if (!draftDoc) return;
+    const blob = new Blob([draftDoc], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Personal_Wishes_Draft.md';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleReset = async (forceClear = false) => {
     try {
       setLoading(true);
+      if (forceClear) {
+        localStorage.removeItem('docIntakeSession');
+      } else {
+        const saved = localStorage.getItem('docIntakeSession');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setMessages(parsed.messages);
+          setIntakeState(parsed.intakeState);
+          setDraftDoc(parsed.draftDoc);
+          setLoading(false);
+          return;
+        }
+      }
+      
       const res = await resetSession();
       setMessages([{ role: 'assistant', content: res.reply }]);
       setIntakeState(res.state);
@@ -179,7 +215,7 @@ export default function App() {
           <button className="chat-send-btn" onClick={handleSend} disabled={loading} title="Send Message">
             <Send size={18} />
           </button>
-          <button className="chat-send-btn" style={{ background: '#3f3f46' }} onClick={handleReset} title="Reset Session">
+          <button className="chat-send-btn" style={{ background: '#3f3f46' }} onClick={() => handleReset(true)} title="Reset Session">
             <RotateCcw size={18} />
           </button>
         </div>
@@ -187,20 +223,31 @@ export default function App() {
 
       {/* Right Preview Pane */}
       <div className="preview-pane">
-        <div className="preview-tabs">
+        <div className="preview-tabs" style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button 
+              className={`tab ${activeTab === 'doc' ? 'active' : ''}`}
+              onClick={() => setActiveTab('doc')}
+            >
+              <FileText size={16} style={{ display: 'inline', marginRight: 6, verticalAlign: 'text-bottom' }} />
+              Draft Document
+            </button>
+            <button 
+              className={`tab ${activeTab === 'state' ? 'active' : ''}`}
+              onClick={() => setActiveTab('state')}
+            >
+              <Database size={16} style={{ display: 'inline', marginRight: 6, verticalAlign: 'text-bottom' }} />
+              Structured State
+            </button>
+          </div>
           <button 
-            className={`tab ${activeTab === 'doc' ? 'active' : ''}`}
-            onClick={() => setActiveTab('doc')}
+            className="tab" 
+            style={{ background: '#8b5cf6', color: 'white', border: 'none', cursor: 'pointer' }}
+            onClick={handleDownload}
+            title="Download Document"
           >
-            <FileText size={16} style={{ display: 'inline', marginRight: 6, verticalAlign: 'text-bottom' }} />
-            Draft Document
-          </button>
-          <button 
-            className={`tab ${activeTab === 'state' ? 'active' : ''}`}
-            onClick={() => setActiveTab('state')}
-          >
-            <Database size={16} style={{ display: 'inline', marginRight: 6, verticalAlign: 'text-bottom' }} />
-            Structured State
+            <Download size={16} style={{ display: 'inline', marginRight: 6, verticalAlign: 'text-bottom' }} />
+            Export
           </button>
         </div>
 
@@ -213,7 +260,7 @@ export default function App() {
           
           {activeTab === 'doc' && (
             <div className="doc-viewer" dangerouslySetInnerHTML={{ 
-              __html: renderMarkdown(draftDoc)
+              __html: DOMPurify.sanitize(renderMarkdown(draftDoc))
             }} />
           )}
         </div>

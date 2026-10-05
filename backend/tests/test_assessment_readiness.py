@@ -142,8 +142,12 @@ def test_ambiguous_and_missing_answers_trigger_follow_ups():
     state.executor.name = "David"
     assert manager.get_next_question(state) == "What is your relationship to your executor?"
     
-    # Executor relationship given -> ask specific gifts
+    # Executor relationship given -> ask backup executor
     state.executor.relationship = "Friend"
+    assert "backup executor" in manager.get_next_question(state).lower()
+    
+    # Backup Executor name given as None -> ask specific gifts
+    state.backup_executor.name = "None"
     assert manager.get_next_question(state) == "Are there any specific gifts you would like to leave to anyone?"
     
     # Specific gifts given -> ask additional wishes

@@ -27,6 +27,11 @@ class StateManager:
         if extraction.executor_relationship is not None:
             new_state.executor.relationship = extraction.executor_relationship
             
+        if extraction.backup_executor_name is not None:
+            new_state.backup_executor.name = extraction.backup_executor_name
+        if extraction.backup_executor_relationship is not None:
+            new_state.backup_executor.relationship = extraction.backup_executor_relationship
+            
         if extraction.specific_gifts is not None:
             new_state.specific_gifts = extraction.specific_gifts
         if extraction.additional_wishes is not None:
@@ -52,6 +57,10 @@ class StateManager:
             return "Who would you like to appoint as your executor?"
         if state.executor.relationship is None:
             return "What is your relationship to your executor?"
+        if state.backup_executor.name is None:
+            return "Who would you like to appoint as your secondary or backup executor? (You can say 'None' if you don't want one)"
+        if state.backup_executor.relationship is None and state.backup_executor.name.lower() != "none":
+            return "What is your relationship to your backup executor?"
         if state.specific_gifts is None:
             return "Are there any specific gifts you would like to leave to anyone?"
         if state.additional_wishes is None:

@@ -2,21 +2,22 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 
 class ExecutorDetails(BaseModel):
-    name: Optional[str] = None
-    relationship: Optional[str] = None
+    name: Optional[str] = Field(default=None, max_length=200)
+    relationship: Optional[str] = Field(default=None, max_length=100)
 
 class IntakeState(BaseModel):
-    full_name: Optional[str] = None
-    home_address: Optional[str] = None
+    full_name: Optional[str] = Field(default=None, max_length=200)
+    home_address: Optional[str] = Field(default=None, max_length=500)
     covers_worldwide_assets: Optional[bool] = None
     has_children: Optional[bool] = None
     children_names: Optional[List[str]] = None
     executor: ExecutorDetails = Field(default_factory=ExecutorDetails)
-    specific_gifts: Optional[str] = None
-    additional_wishes: Optional[str] = None
+    backup_executor: ExecutorDetails = Field(default_factory=ExecutorDetails)
+    specific_gifts: Optional[str] = Field(default=None, max_length=2000)
+    additional_wishes: Optional[str] = Field(default=None, max_length=2000)
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(..., max_length=2000)
     state: IntakeState
 
 class ChatResponse(BaseModel):
@@ -29,15 +30,17 @@ class ExtractionResult(BaseModel):
     LLM output format for extracting information from the user message
     It explicitly defines values that were mentioned in the current turn.
     """
-    full_name: Optional[str] = None
-    home_address: Optional[str] = None
+    full_name: Optional[str] = Field(default=None, max_length=200)
+    home_address: Optional[str] = Field(default=None, max_length=500)
     covers_worldwide_assets: Optional[bool] = None
     has_children: Optional[bool] = None
     children_names: Optional[List[str]] = None
-    executor_name: Optional[str] = None
-    executor_relationship: Optional[str] = None
-    specific_gifts: Optional[str] = None
-    additional_wishes: Optional[str] = None
+    executor_name: Optional[str] = Field(default=None, max_length=200)
+    executor_relationship: Optional[str] = Field(default=None, max_length=100)
+    backup_executor_name: Optional[str] = Field(default=None, max_length=200)
+    backup_executor_relationship: Optional[str] = Field(default=None, max_length=100)
+    specific_gifts: Optional[str] = Field(default=None, max_length=2000)
+    additional_wishes: Optional[str] = Field(default=None, max_length=2000)
     
     # Reasoning field helps the LLM explain its extraction process
-    reasoning: Optional[str] = None
+    reasoning: Optional[str] = Field(default=None, max_length=2000)

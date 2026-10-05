@@ -36,8 +36,16 @@ class DocumentGenerator:
         doc.append("\n## 4. Executor")
         exec_name = state.executor.name if state.executor.name else "[UNCONFIRMED EXECUTOR NAME]"
         exec_rel = state.executor.relationship if state.executor.relationship else "[UNCONFIRMED RELATIONSHIP]"
-        doc.append(f"- **Name**: {exec_name}")
-        doc.append(f"- **Relationship**: {exec_rel}")
+        doc.append(f"- **Primary Name**: {exec_name}")
+        doc.append(f"- **Primary Relationship**: {exec_rel}")
+        
+        if state.backup_executor.name and state.backup_executor.name.lower() == "none":
+            doc.append("- **Backup Executor**: None")
+        else:
+            b_exec_name = state.backup_executor.name if state.backup_executor.name else "[UNCONFIRMED BACKUP NAME]"
+            b_exec_rel = state.backup_executor.relationship if state.backup_executor.relationship else "[UNCONFIRMED BACKUP RELATIONSHIP]"
+            doc.append(f"- **Backup Name**: {b_exec_name}")
+            doc.append(f"- **Backup Relationship**: {b_exec_rel}")
         
         doc.append("\n## 5. Specific Gifts")
         gifts = state.specific_gifts if state.specific_gifts else "None specified."
