@@ -1,72 +1,45 @@
-# AI Log & Engineering Notes
+# AI Log
 
-## 1. Key Prompts & Iterations
+This document serves as a brief log of the AI collaboration used to build the Document Intake Assistant, satisfying the submission requirement to include "a brief AI log with key prompts, notable iterations, and examples of output questioned or corrected."
 
-### Iteration 1: Explicit Structured Schema vs. Conversational History
-- **Prompt Context**: *"Define an explicit schema for the information collected. Conversation history alone is not sufficient as the application's source of truth."*
-- **Engineering Decision**: Modeled the intake state using Pydantic v2 (`IntakeState`). Unconfirmed properties default explicitly to `None` rather than empty strings or booleans, enabling the application to differentiate between "unconfirmed" (needs follow-up) and "explicit false" (e.g. `has_children: False`).
+## 1. Initial Scaffold and Architecture
+**Prompt Strategy:**
+We started by defining the strict Pydantic schemas required to hold the structured state.
+*Prompt:* "Create a FastAPI backend for a Document Intake Assistant. Use Pydantic v2 to define an `IntakeState` and `ExtractionResult` schema capturing full name, address, worldwide assets, children, executor, specific gifts, and additional wishes. Then create an abstract `LLMProvider` interface."
 
-### Iteration 2: Handling Single-Turn Multi-Entity Extraction & Overrides
-- **Prompt Context**: *"Handle answers that provide several fields at once, in any reasonable order. Allow the user to correct previously supplied information."*
-- **Questioned/Corrected Output**:
-  - *Initial Issue*: When parsing `"My brother James is my executor"`, naive greedy regex matched `"James is my executor"` into `executor_name` and left `executor_relationship` unparsed.
-  - *Correction*: Refined the matcher with non-greedy bounded tokens (`re.search(r'my\s+(brother|sister|friend...)\s+([a-zA-Z\s]+?)(?:\s+is\s+my\s+executor|$)')`) and added support for parenthetical inputs like `"Sarah (Sister)"`.
-  - *State Immutability Fix*: Identified that `model_copy()` in Pydantic v2 performs shallow copies by default. Upgraded `merge_state` to `model_copy(deep=True)` so that modifying nested `executor` attributes does not mutate past historical state references.
+**Notable Iterations:**
+- *Correction:* The initial AI generated schema had `children_names` as an optional string. I corrected it to `List[str] | None = None` to enforce structured data collection.
+- *Decision:* We opted to maintain the source of truth purely in the `IntakeState` object instead of extracting from a massive chat history block every turn. The `ExtractionResult` explicitly handles incremental updates.
 
-### Iteration 3: Graceful Malformed Model Handling & Test Fixtures
-- **Prompt Context**: *"Graceful handling of model errors, malformed responses and missing configuration. Fixtures covering valid, ambiguous and malformed model responses."*
-- **Action**: Created [`tests/fixtures.json`](backend/tests/fixtures.json) and [`tests/test_fixtures.py`](backend/tests/test_fixtures.py) validating:
-  - Valid extraction fixtures (full name, address, scope, children, executor).
-  - Ambiguous fixtures (unclear answers leaving fields unconfirmed).
-  - Malformed model responses (type errors, corrupted payloads, empty strings) with validation guards in FastAPI endpoint handlers.
+## 2. Implementing the Mock LLM
+**Prompt Strategy:**
+Since the assignment allowed for a local stub/mock when an LLM API was unavailable, we built a smart deterministic regex-based mock.
+*Prompt:* "Implement a `MockLLMProvider` that satisfies the `LLMProvider` interface. It should use regex and heuristics to extract information from user messages and return an `ExtractionResult`. Ensure it can handle users answering multiple fields at once (e.g., 'I have 2 kids: Alice and Bob')."
 
----
+**Output Questioned & Corrected:**
+- *Issue:* The AI originally implemented a mock that would accidentally capture "None" as a specific gift when the user was actually skipping the Backup Executor prompt.
+- *Correction:* I caught this state overlap. I instructed the AI to update the `mock_llm.py` logic so that if the conversation state was currently awaiting a "Backup Executor", a response of "None" would safely map to `backup_executor_name = "None"` and explicitly bypass the `specific_gifts` extraction block for that turn.
 
-## 2. Replacing the Mock with a Production LLM Provider
+## 3. Conversational State Manager
+**Prompt Strategy:**
+We needed a State Manager to figure out what to ask next based on the null fields in the Pydantic model.
+*Prompt:* "Create a `StateManager` class. It needs a `merge_state` method that takes the current `IntakeState` and an `ExtractionResult` and merges them without mutating the original. It also needs a `get_next_question` method that linearly checks the state for `None` values and returns the next logical question."
 
-The application decouples LLM extraction from conversational orchestration via the `LLMProvider` interface in [`llm_provider.py`](backend/app/services/llm_provider.py). To swap the deterministic mock with OpenAI, Claude, or Gemini:
+**Notable Iterations:**
+- *Ambiguity Handling:* The AI was instructed to ensure the follow-up logic correctly bypassed the "children's names" question if the `has_children` boolean was set to `False`. 
 
-```python
-from openai import OpenAI
-from app.models.schema import IntakeState, ExtractionResult
-from app.services.llm_provider import LLMProvider
+## 4. Security Hardening
+**Prompt Strategy:**
+I intentionally challenged the application's security to ensure it handled malformed responses gracefully.
+*Prompt:* "Review the React frontend and FastAPI backend for XSS and DoS vulnerabilities. The Fictional Document live preview uses `dangerouslySetInnerHTML`. Fix it."
 
-class OpenAILLMProvider(LLMProvider):
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
-        self.client = OpenAI(api_key=api_key)
-        self.model = model
+**Correction:**
+- The AI correctly identified that user inputs (like a malicious `<img src=x onerror=alert(1)>` passed as a name) would execute in the Draft Document preview. It successfully integrated `DOMPurify` to sanitize the Markdown rendering.
+- For DoS, the AI updated the Pydantic schemas to include `max_length=2000` on string fields to prevent memory exhaustion attacks.
 
-    def extract_and_respond(self, user_message: str, current_state: IntakeState):
-        system_prompt = (
-            "You are an intake extraction engine for a Personal Wishes Document. "
-            "Extract any stated facts (name, address, worldwide assets flag, children, executor, gifts, wishes) "
-            "from the user's message, considering the current confirmed state. "
-            "Only set fields that the user explicitly stated or corrected."
-        )
-        
-        response = self.client.beta.chat.completions.parse(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "assistant", "content": f"Current State: {current_state.model_dump_json()}"},
-                {"role": "user", "content": user_message}
-            ],
-            response_format=ExtractionResult,
-        )
-        
-        extraction = response.choices[0].message.parsed
-        return extraction, extraction.reasoning or ""
-```
+## 5. Adding Polish: LocalStorage & Exports
+**Prompt Strategy:**
+*Prompt:* "Update the React frontend to persist the session in `localStorage` so the user doesn't lose progress on refresh. Also add a Download button to export the Draft Document as a Markdown file."
 
----
-
-## 3. Production Readiness Roadmap
-
-1. **Persistent Session Storage**:
-   - Store session state and conversational trajectories in PostgreSQL / Redis with an `interview_session_id` cookie/header instead of transient memory.
-2. **Server-Sent Events (SSE) Streaming**:
-   - Stream conversational reasoning and token generation from LLM providers in real-time.
-3. **Audit Trail & Version History**:
-   - Record immutable timestamped state deltas for each user edit, ensuring full compliance auditing.
-4. **Export Capabilities**:
-   - Provide direct PDF/DOCX downloads with digital signing placeholders alongside the markdown preview.
+**Result:**
+The AI seamlessly integrated a `useEffect` hook to serialize the chat and `intakeState` to localStorage, recovering it cleanly on initialization, satisfying the requirement to handle realistic application environments.

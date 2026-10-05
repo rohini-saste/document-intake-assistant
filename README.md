@@ -82,3 +82,10 @@ The test suite validates:
 - `test_state.py`: State merges, deep immutability, entity extraction heuristics, document generation, and FastAPI endpoints.
 - `test_fixtures.py`: Fixture-driven validation against `tests/fixtures.json` covering valid, ambiguous, and malformed model inputs.
 
+## Production Improvements
+If this application were moved to a production environment, I would make the following improvements:
+1. **Real LLM Integration**: Replace the `MockLLMProvider` with the real OpenAI/Claude integration using Structured Outputs. The current architecture allows this natively via the `LLMProvider` interface.
+2. **Database Persistence**: Currently, session states are ephemeral in the backend (relying on the client sending the state) and persisted in the frontend via `localStorage`. For production, I would add a PostgreSQL database with SQLAlchemy to track session progress and implement user authentication.
+3. **Enhanced Validation & Retry Logic**: Add logic to handle cases where a real LLM hallucinates an invalid response or a 422 error is returned. The LLM would be prompted in a loop to self-correct its JSON output if it fails Pydantic validation.
+4. **Export Service**: Convert the Markdown draft document into a stylized PDF using a backend rendering library (like WeasyPrint or ReportLab) instead of relying purely on frontend blob generation.
+5. **Rate Limiting & Security**: Add robust rate-limiting to the FastAPI backend to prevent API abuse, and strict CORS rules for the frontend.
